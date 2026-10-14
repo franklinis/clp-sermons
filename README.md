@@ -13,7 +13,7 @@ Each clip has:
 
 1. `.github/workflows/sermons.yml` runs on Sunday evening, Monday and Tuesday (several times, since YouTube's automatic captions can take a few hours). It checks the playlist's RSS feed for a sermon dated on or after `start_from` in `church.json` that hasn't been done yet.
 2. It downloads the video and YouTube's automatic Tamil captions with [yt-dlp](https://github.com/yt-dlp/yt-dlp).
-3. **Claude** (Anthropic API, `claude-opus-5-5`) reads the timed captions and chooses the best stand-alone moments, writes corrected Tamil subtitles with English translations, the titles and the post text (`sermon_clips/picker.py`). It quotes the first and last words of each moment, and the code finds those words in the word-level caption timings, so every cut falls between words. A long story can be shortened by skipping a digression (a clip of up to three parts).
+3. **Claude** (`claude-opus-5-5`, through Azure/Microsoft Foundry or the Claude API; about $0.50–1 per sermon) reads the timed captions and chooses the best stand-alone moments, writes corrected Tamil subtitles with English translations, the titles and the post text (`sermon_clips/picker.py`). It quotes the first and last words of each moment, and the code finds those words in the word-level caption timings, so every cut falls between words. A long story can be shortened by skipping a digression (a clip of up to three parts).
 4. Each clip is rendered (`sermon_clips/render.py`): text by headless Chrome (correct Tamil shaping), face-following crop with OpenCV, and the sound with ffmpeg.
 5. Clips, stills and a review page are pushed to the [`media` branch](../../tree/media), which keeps only the latest 6 sermons. GitHub Pages serves the review page.
 6. For each clip and Buffer video channel, a draft is created with the publish time preset: one clip a day from the next day at 18:00, skipping Sundays.
@@ -25,7 +25,10 @@ Re-running is safe: Claude's choice is saved as `plan.json` and is reused; finis
 
 | Where | Name | Value |
 |---|---|---|
-| Secret | `ANTHROPIC_API_KEY` | An API key from [platform.claude.com](https://platform.claude.com). About $0.50–1 per sermon. |
+| Secret | `ANTHROPIC_FOUNDRY_API_KEY` | Claude through Azure: the key of the Microsoft Foundry resource where Claude is deployed |
+| Variable | `ANTHROPIC_FOUNDRY_RESOURCE` | That resource's name (the `<name>` in `https://<name>.services.ai.azure.com`) |
+| Variable | `CLAUDE_MODEL` | Optional: the deployment name, if it isn't `claude-opus-5-5` |
+| Secret | `ANTHROPIC_API_KEY` | *Or*, instead of Azure, a key from [platform.claude.com](https://platform.claude.com) |
 | Secret | `BUFFER_API_KEY` | The same Buffer key as clp-daily-verse |
 | Secret | `TEAMS_WEBHOOK_URL` | The same Teams Workflows webhook as clp-daily-verse (optional) |
 | Variable | `BUFFER_VIDEO_CHANNELS` | `id:service,…` (service = `youtube`, `instagram` or `facebook`) |

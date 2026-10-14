@@ -110,22 +110,28 @@ class PickError(Exception):
 
 def ask_claude(transcript: Transcript, title: str, count: int, min_s: int, max_s: int) -> list[dict]:
     """Claude's raw suggestions (absolute times, as in the captions)."""
-    client = anthropic.Anthropic()
     prompt = (
         f"Sermon title: {title}\n\n"
         f"Choose the {count} best moments, each {min_s} to {max_s} seconds long in total.\n\n"
         f"<captions>\n{transcript.for_prompt()}\n</captions>"
     )
-    with client.beta.messages.stream(
-        model=MODEL,
-        max_tokens=64000,
-        system=SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
-        output_config={"effort": "high", "format": {"type": "json_schema", "schema": SCHEMA}},
+    request = {
+        "model": MODEL,
+        "max_tokens": 64000,
+        "system": SYSTEM,
+        "messages": [{"role": "user", "content": prompt}],
+        "output_config": {"effort": "high", "format": {"type": "json_schema", "schema": SCHEMA}},
+    }
+    if os.environ.get("ANTHROPIC_FOUNDRY_API_KEY"):
+        # Claude on Microsoft Foundry (billed through Azure): ANTHROPIC_FOUNDRY_API_KEY + ANTHROPIC_FOUNDRY_RESOURCE,
+        # and CLAUDE_MODEL if the deployment has another name.
+        client = anthropic.AnthropicFoundry()
+    else:
+        client = anthropic.Anthropic()
         # If a safety classifier declines (unlikely for sermons), let the API retry on its recommended model.
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
-    ) as stream:
+        # (The Claude API only; Foundry has no server-side fallbacks.)
+        request |= {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
+    with client.beta.messages.stream(**request) as stream:
         message = stream.get_final_message()
 
     usage = message.usage

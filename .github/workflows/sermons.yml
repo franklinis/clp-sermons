@@ -60,6 +60,10 @@ jobs:
 
       - name: Make clips
         env:
+          # Claude through Azure (Microsoft Foundry) when its key is set, otherwise the Claude API.
+          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.ANTHROPIC_FOUNDRY_API_KEY }}
+          ANTHROPIC_FOUNDRY_RESOURCE: ${{ vars.ANTHROPIC_FOUNDRY_RESOURCE }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-opus-5-5' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           VIDEO: ${{ inputs.video }}
           REDO: ${{ inputs.redo && '--redo' || '' }}
