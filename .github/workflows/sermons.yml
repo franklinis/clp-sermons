@@ -1,0 +1,102 @@
+name: Sermon Shorts
+
+# After each Sunday sermon is added to the "Sunday Sermons" playlist: download it,
+# let Claude choose the best moments, render vertical clips with Tamil and English
+# subtitles, publish them on the `media` branch (with a review page on GitHub Pages)
+# and save Buffer drafts for review.
+on:
+  schedule:
+    # Sunday evening to Tuesday, several times: YouTube's automatic captions can take a
+    # few hours to appear, and the job is safe to repeat (sermons already done are skipped).
+    - cron: "0 14,18 * * 0" # Sun 15:00, 19:00 CET / 16:00, 20:00 CEST
+    - cron: "0 6,12,18 * * 1,2"
+  workflow_dispatch:
+    inputs:
+      video:
+        description: "A YouTube video id or link. Empty = the next new sermon in the playlist."
+        required: false
+      redo:
+        description: "Start that sermon again (new moments from Claude)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency: sermon-shorts
+
+jobs:
+  clips:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      MEDIA_DIR: ${{ github.workspace }}/media
+      WORK_DIR: ${{ runner.temp }}/work
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      # yt-dlp needs a JavaScript runtime for YouTube.
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install ffmpeg and Python packages
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
+          pip install -q -r requirements.txt
+
+      - name: Check out the media branch
+        run: |
+          if git fetch origin media; then
+            git worktree add media FETCH_HEAD
+          else
+            git worktree add --detach media
+            git -C media rm -rq --cached . && git -C media clean -fdq
+          fi
+
+      - name: Make clips
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          VIDEO: ${{ inputs.video }}
+          REDO: ${{ inputs.redo && '--redo' || '' }}
+        run: python -m sermon_clips process ${VIDEO:+--video "$VIDEO"} $REDO
+
+      - name: Publish clips and review page
+        if: ${{ always() }}
+        run: |
+          python -m sermon_clips prune --keep 6
+          python -m sermon_clips page
+          cd media
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # One commit holding only the latest sermons, so the repo never grows.
+          git checkout -q --orphan publish
+          git add -A
+          git commit -qm "Sermon Shorts" --allow-empty
+          git push -qf origin publish:media
+
+      - name: Create Buffer drafts
+        if: ${{ vars.BUFFER_VIDEO_CHANNELS != '' }}
+        env:
+          BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+          BUFFER_VIDEO_CHANNELS: ${{ vars.BUFFER_VIDEO_CHANNELS }}
+          POST_TIME: ${{ vars.POST_TIME || '18:00' }}
+        run: python -m sermon_clips drafts
+
+      - name: Tell Teams
+        if: ${{ always() }}
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        run: python -m sermon_clips notify
+
+      - name: Record drafts and notifications
+        if: ${{ always() }}
+        run: |
+          python -m sermon_clips page
+          cd media
+          git add -A
+          git diff --cached --quiet || (git commit -qm "Record Buffer drafts" && git push -qf origin publish:media)

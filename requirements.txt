@@ -1,0 +1,4 @@
+anthropic>=1.0
+yt-dlp>=2026.8.19
+opencv-python-headless>=4.10,<5
+numpy>=2.0

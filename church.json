@@ -1,0 +1,40 @@
+{
+  "name": "Christ the Living Petra Church",
+  "footer": "Christ the Living Petra · Tamil Church Munich",
+  "playlist_id": "PLeNn8a5XMV-ftZrjqOEB3vHOxQwqA6nF6",
+  "start_from": "2026-10-11",
+  "clips_per_sermon": 5,
+  "clip_seconds": {
+    "min": 20,
+    "max": 90
+  },
+  "website": "https://christ-livingpetra.de",
+  "address": "Alpenveilchenstraße 45, 80689 München",
+  "invitation": {
+    "ta": "ஞாயிறு ஆராதனை காலை 9:00 · Alpenveilchenstraße 45, München",
+    "en": "Sunday worship 9:00 AM (Tamil) · Alpenveilchenstraße 45, Munich"
+  },
+  "full_sermon": {
+    "ta": "முழு பிரசங்கம்",
+    "en": "Full sermon"
+  },
+  "hashtags": {
+    "youtube": [
+      "#TamilSermon",
+      "#TamilChristian",
+      "#Munich"
+    ],
+    "instagram": [
+      "#TamilSermon",
+      "#TamilChristian",
+      "#தமிழ்பிரசங்கம்",
+      "#München",
+      "#Munich"
+    ],
+    "facebook": [
+      "#TamilSermon",
+      "#TamilChristian",
+      "#Munich"
+    ]
+  }
+}

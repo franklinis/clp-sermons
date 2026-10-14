@@ -1,0 +1,78 @@
+"""The review page: every recent sermon's clips with their text, published on GitHub Pages."""
+
+from __future__ import annotations
+
+from datetime import datetime
+import html
+
+from .posts import TIMEZONE
+
+
+def _esc(text: str) -> str:
+    return html.escape(text or "")
+
+
+def _when(iso: str | None) -> str:
+    if not iso:
+        return ""
+    return datetime.fromisoformat(iso).astimezone(TIMEZONE).strftime("%a %d %b, %H:%M")
+
+
+def clip_html(sermon: dict, clip: dict) -> str:
+    folder = sermon["folder"]
+    cards = "".join(
+        f"<li><span class=t>{a:0.0f}s</span> {_esc(ta)}<br><span class=en>{_esc(en)}</span></li>"
+        for a, _b, ta, en in clip["cards"]
+    )
+    due = f"<p class=due>Planned for {_when(clip.get('due'))}</p>" if clip.get("due") else ""
+    return f"""
+<article class=clip>
+  <video controls preload=none playsinline poster="{folder}/{clip['poster']}" src="{folder}/{clip['file']}"></video>
+  <div class=info>
+    <h3>{_esc(clip['title_ta'])}</h3>
+    <p class=sub>{_esc(clip['title_en'])} · {clip['seconds']:.0f}s</p>
+    <p class=why>{_esc(clip['why'])}</p>{due}
+    <details><summary>Subtitles</summary><ol>{cards}</ol></details>
+    <details><summary>Post text</summary><p class=caption>{_esc(clip['caption_ta'])}<br>{_esc(clip['caption_en'])}</p>
+      <p class=sub>YouTube title: {_esc(clip['youtube_title'])}</p></details>
+    <a class=dl href="{folder}/{clip['file']}" download>Download</a>
+  </div>
+</article>"""
+
+
+def page(sermons: list[dict]) -> str:
+    sections = []
+    for sermon in sermons:
+        clips = "".join(clip_html(sermon, clip) for clip in sermon["clips"])
+        sections.append(f"""
+<section>
+  <h2>{_esc(sermon['short_title'])}</h2>
+  <p class=sub>{sermon['date']} · <a href="{sermon['url']}">Full sermon on YouTube</a> ·
+    {len(sermon['clips'])} clips{' · in Buffer as drafts' if sermon.get('buffer') else ''}</p>
+  <div class=grid>{clips}</div>
+</section>""")
+    body = "".join(sections) or "<p>No sermons yet.</p>"
+    return f"""<!doctype html>
+<html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<meta name=robots content="noindex,nofollow"><title>Sermon Shorts</title>
+<style>
+:root{{--bg:#f6f5fb;--card:#fff;--text:#1d1b2e;--muted:#5d5a73;--accent:#3b2a8c;--line:#e3e0ef}}
+@media (prefers-color-scheme:dark){{:root{{--bg:#12111a;--card:#1d1b29;--text:#eceaf6;--muted:#a7a3bd;
+  --accent:#b9a8ff;--line:#2e2b40}}}}
+body{{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Noto Sans Tamil",sans-serif}}
+header,section{{max-width:1180px;margin:0 auto;padding:16px}}
+h1{{margin:.4em 0 0}} h2{{margin:1.2em 0 0}} h3{{margin:0;font-size:1.15rem}}
+a{{color:var(--accent)}} .sub,.due{{color:var(--muted);margin:.2em 0}}
+.grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px;margin-top:12px}}
+.clip{{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}}
+video{{width:100%;aspect-ratio:9/16;background:#000;display:block}}
+.info{{padding:12px 14px 16px}} .why{{margin:.5em 0}} summary{{cursor:pointer;color:var(--accent)}}
+ol{{padding-left:0;list-style:none;font-size:.9rem}} li{{margin:.4em 0}} .t{{color:var(--muted);font-size:.8rem}}
+.en{{color:var(--muted)}} .caption{{font-size:.95rem}} .dl{{display:inline-block;margin-top:8px}}
+</style></head><body>
+<header><h1>Sermon Shorts</h1>
+<p class=sub>Clips are made automatically from the Sunday Sermons playlist and saved in Buffer as drafts.
+Watch them here, then approve the ones you want in Buffer and delete the rest.</p></header>
+{body}
+</body></html>
+"""
