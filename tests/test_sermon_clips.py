@@ -1,5 +1,6 @@
 from datetime import date, datetime, time
 import json
+from pathlib import Path
 
 from sermon_clips import picker, posts, review
 from sermon_clips.transcript import Transcript
@@ -72,8 +73,7 @@ def test_sermon_date_comes_from_the_title():
 
 
 def test_post_text_and_review_page():
-    with open("church.json", encoding="utf-8") as f:
-        church = json.load(f)
+    church = json.loads((Path(__file__).parent.parent / "church.json").read_text(encoding="utf-8"))
     clip = {"id": "c1", "title_ta": "தலைப்பு", "title_en": "Title", "youtube_title": "தலைப்பு | Tamil Sermon",
             "caption_ta": "தமிழ்", "caption_en": "English", "why": "Because", "cards": [[0, 2, "அ", "a"]],
             "file": "c1.mp4", "poster": "c1.jpg", "seconds": 42}

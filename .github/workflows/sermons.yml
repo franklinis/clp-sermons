@@ -31,7 +31,7 @@ jobs:
     timeout-minutes: 90
     env:
       MEDIA_DIR: ${{ github.workspace }}/media
-      WORK_DIR: ${{ runner.temp }}/work
+      WORK_DIR: ${{ github.workspace }}/.work
     steps:
       - uses: actions/checkout@v5
 
@@ -66,8 +66,8 @@ jobs:
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-opus-5-5' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           VIDEO: ${{ inputs.video }}
-          REDO: ${{ inputs.redo && '--redo' || '' }}
-        run: python -m sermon_clips process ${VIDEO:+--video "$VIDEO"} $REDO
+          REDO: ${{ inputs.redo && 'yes' || '' }}
+        run: python -m sermon_clips process ${VIDEO:+--video "$VIDEO"} ${REDO:+--redo}
 
       - name: Publish clips and review page
         if: ${{ always() }}
