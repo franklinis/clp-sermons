@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -87,8 +88,12 @@ def download(sermon: Sermon, workdir: Path) -> tuple[Path, Path]:
     workdir.mkdir(parents=True, exist_ok=True)
     video, captions = workdir / "sermon.mp4", workdir / "sermon.ta-orig.json3"
     if not (video.exists() and captions.exists()):
+        # YouTube refuses cloud servers like GitHub's unless signed in: YOUTUBE_COOKIES_FILE holds the cookies
+        # of a separate Google account kept for this (see the README).
+        cookies = os.environ.get("YOUTUBE_COOKIES_FILE", "")
         result = subprocess.run(
             [sys.executable, "-m", "yt_dlp", "--no-progress", "--no-playlist",
+             *(["--cookies", cookies] if cookies and Path(cookies).stat().st_size else []),
              "-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]", "--merge-output-format", "mp4",
              "--write-auto-subs", "--sub-langs", "ta-orig", "--sub-format", "json3",
              "-o", str(workdir / "sermon.%(ext)s"), sermon.url],
@@ -97,7 +102,11 @@ def download(sermon: Sermon, workdir: Path) -> tuple[Path, Path]:
         print(result.stdout[-2000:])
         if result.returncode != 0:
             errors = [line for line in result.stderr.splitlines() if "ERROR" in line] or result.stderr.splitlines()[-3:]
-            raise RuntimeError("YouTube download failed: " + " ".join(errors)[:500])
+            message = " ".join(errors)[:400]
+            if "Sign in" in message or "bot" in message:
+                message = ("YouTube asked to sign in: the YOUTUBE_COOKIES secret is missing or has expired. "
+                           "Export fresh cookies (see the README) and run the workflow again. " + message)
+            raise RuntimeError("YouTube download failed: " + message)
     if not captions.exists():
         raise RuntimeError(f"YouTube has no automatic Tamil captions for {sermon.url} yet; try again later")
     return video, captions

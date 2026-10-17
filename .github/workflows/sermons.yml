@@ -60,6 +60,7 @@ jobs:
 
       - name: Make clips
         env:
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
           # Claude through Azure (Microsoft Foundry) when its key is set, otherwise the Claude API.
           ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.ANTHROPIC_FOUNDRY_API_KEY }}
           ANTHROPIC_FOUNDRY_RESOURCE: ${{ vars.ANTHROPIC_FOUNDRY_RESOURCE }}
@@ -67,7 +68,14 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           VIDEO: ${{ inputs.video }}
           REDO: ${{ inputs.redo && 'yes' || '' }}
-        run: python -m sermon_clips process ${VIDEO:+--video "$VIDEO"} ${REDO:+--redo}
+        run: |
+          # The cookies go to a file outside the repo, readable only by this job.
+          if [ -n "$YOUTUBE_COOKIES" ]; then
+            export YOUTUBE_COOKIES_FILE="$RUNNER_TEMP/youtube-cookies.txt"
+            (umask 077; printf '%s\n' "$YOUTUBE_COOKIES" > "$YOUTUBE_COOKIES_FILE")
+          fi
+          unset YOUTUBE_COOKIES
+          python -m sermon_clips process ${VIDEO:+--video "$VIDEO"} ${REDO:+--redo}
 
       - name: Publish clips and review page
         if: ${{ always() }}

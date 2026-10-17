@@ -29,6 +29,7 @@ Re-running is safe: Claude's choice is saved as `plan.json` and is reused; finis
 | Variable | `ANTHROPIC_FOUNDRY_RESOURCE` | That resource's name (the `<name>` in `https://<name>.services.ai.azure.com`) |
 | Variable | `CLAUDE_MODEL` | Optional: the deployment name, if it isn't `claude-opus-5-5` |
 | Secret | `ANTHROPIC_API_KEY` | *Or*, instead of Azure, a key from [platform.claude.com](https://platform.claude.com) |
+| Secret | `YOUTUBE_COOKIES` | YouTube sign-in cookies of a separate Google account (see below) |
 | Secret | `BUFFER_API_KEY` | The same Buffer key as clp-daily-verse |
 | Secret | `TEAMS_WEBHOOK_URL` | The same Teams Workflows webhook as clp-daily-verse (optional) |
 | Variable | `BUFFER_VIDEO_CHANNELS` | `id:service,…` (service = `youtube`, `instagram` or `facebook`) |
@@ -45,7 +46,18 @@ Church details, hashtags, the playlist and the number and length of clips are in
 - leave *video* empty to do the next new sermon, or paste a YouTube link to do a particular one (also older sermons);
 - tick *redo* to start a sermon again with a fresh choice of moments from Claude.
 
-If YouTube blocks the download from GitHub's servers ("Sign in to confirm you're not a bot"), run the same steps on a computer at home, where YouTube allows it, then push the `media` folder:
+### YouTube cookies
+
+YouTube refuses downloads from cloud servers such as GitHub's ("Sign in to confirm you're not a bot") unless the request is signed in. Use a **separate Google account** made only for this, never the church's own account, because YouTube may restrict accounts used this way.
+
+1. Install the browser extension **Get cookies.txt LOCALLY** (Chrome or Firefox).
+2. Open a **private/incognito window** (allow the extension there), sign in to YouTube with the separate account, then open `https://www.youtube.com/robots.txt` in the same tab.
+3. Export the cookies for youtube.com with the extension (Netscape format) and **close the private window** straight away without signing out, so YouTube doesn't replace these cookies.
+4. Paste the whole file into the repository secret `YOUTUBE_COOKIES`.
+
+Cookies expire after some weeks or months. When they do, the Teams card says so; repeat these steps and re-run the workflow.
+
+If you'd rather not use cookies, run the same steps on a computer at home, where YouTube allows downloads, then push the `media` folder:
 
 ```bash
 pip install -r requirements.txt   # plus ffmpeg and Deno (brew install ffmpeg deno)
