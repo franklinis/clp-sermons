@@ -8,10 +8,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import json
 from pathlib import Path
 import re
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 
@@ -70,13 +72,14 @@ def playlist(playlist_id: str) -> list[Sermon]:
 
 
 def video_info(video_id: str) -> Sermon:
-    """Look up one video by id (for runs started by hand)."""
-    out = subprocess.run(
-        [sys.executable, "-m", "yt_dlp", "--skip-download", "--print", "%(title)s\n%(timestamp)s",
-         f"https://www.youtube.com/watch?v={video_id}"],
-        check=True, capture_output=True, text=True,
-    ).stdout.strip().splitlines()
-    return Sermon(video_id, out[0], datetime.fromtimestamp(int(out[1])))
+    """Look up one video by id (for runs started by hand), through YouTube's public oEmbed endpoint.
+
+    oEmbed has no upload date; the sermon's date comes from its title, as for every sermon in the playlist.
+    """
+    url = "https://www.youtube.com/oembed?format=json&url=" + urllib.parse.quote(f"https://www.youtube.com/watch?v={video_id}")
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "clp-sermons"}), timeout=30) as response:
+        title = json.load(response)["title"]
+    return Sermon(video_id, title, datetime.now())
 
 
 def download(sermon: Sermon, workdir: Path) -> tuple[Path, Path]:
@@ -84,13 +87,17 @@ def download(sermon: Sermon, workdir: Path) -> tuple[Path, Path]:
     workdir.mkdir(parents=True, exist_ok=True)
     video, captions = workdir / "sermon.mp4", workdir / "sermon.ta-orig.json3"
     if not (video.exists() and captions.exists()):
-        subprocess.run(
+        result = subprocess.run(
             [sys.executable, "-m", "yt_dlp", "--no-progress", "--no-playlist",
              "-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]", "--merge-output-format", "mp4",
              "--write-auto-subs", "--sub-langs", "ta-orig", "--sub-format", "json3",
              "-o", str(workdir / "sermon.%(ext)s"), sermon.url],
-            check=True,
+            capture_output=True, text=True,
         )
+        print(result.stdout[-2000:])
+        if result.returncode != 0:
+            errors = [line for line in result.stderr.splitlines() if "ERROR" in line] or result.stderr.splitlines()[-3:]
+            raise RuntimeError("YouTube download failed: " + " ".join(errors)[:500])
     if not captions.exists():
         raise RuntimeError(f"YouTube has no automatic Tamil captions for {sermon.url} yet; try again later")
     return video, captions
