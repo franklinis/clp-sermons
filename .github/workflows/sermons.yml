@@ -1,24 +1,15 @@
 name: Sermon Shorts
 
-# After each Sunday sermon is added to the "Sunday Sermons" playlist: download it,
-# let Claude choose the best moments, render vertical clips with Tamil and English
-# subtitles, publish them on the `media` branch (with a review page on GitHub Pages)
-# and save Buffer drafts for review.
+# The clips are made on a Mac at the church (scripts/mac-run.sh): YouTube doesn't allow
+# downloads from cloud servers like GitHub's. When the Mac has pushed new clips to the
+# `media` branch, it starts this workflow, which uses the repository's secrets to save the
+# Buffer drafts and tell Teams, or to report what failed.
 on:
-  schedule:
-    # Sunday evening to Tuesday, several times: YouTube's automatic captions can take a
-    # few hours to appear, and the job is safe to repeat (sermons already done are skipped).
-    - cron: "0 14,18 * * 0" # Sun 15:00, 19:00 CET / 16:00, 20:00 CEST
-    - cron: "0 6,12,18 * * 1,2"
   workflow_dispatch:
     inputs:
-      video:
-        description: "A YouTube video id or link. Empty = the next new sermon in the playlist."
+      failure:
+        description: "Set by the Mac when making clips failed: what went wrong"
         required: false
-      redo:
-        description: "Start that sermon again (new moments from Claude)"
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -26,9 +17,8 @@ permissions:
 concurrency: sermon-shorts
 
 jobs:
-  clips:
+  publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
     env:
       MEDIA_DIR: ${{ github.workspace }}/media
       WORK_DIR: ${{ github.workspace }}/.work
@@ -39,60 +29,16 @@ jobs:
         with:
           python-version: "3.13"
 
-      # yt-dlp needs a JavaScript runtime for YouTube.
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: Install ffmpeg and Python packages
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
-          pip install -q -r requirements.txt
+      - name: Install Python packages
+        run: pip install -q -r requirements.txt
 
       - name: Check out the media branch
         run: |
-          if git fetch origin media; then
-            git worktree add media FETCH_HEAD
-          else
-            git worktree add --detach media
-            git -C media rm -rq --cached . && git -C media clean -fdq
-          fi
-
-      - name: Make clips
-        env:
-          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
-          # Claude through Azure (Microsoft Foundry) when its key is set, otherwise the Claude API.
-          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.ANTHROPIC_FOUNDRY_API_KEY }}
-          ANTHROPIC_FOUNDRY_RESOURCE: ${{ vars.ANTHROPIC_FOUNDRY_RESOURCE }}
-          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-opus-5-5' }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          VIDEO: ${{ inputs.video }}
-          REDO: ${{ inputs.redo && 'yes' || '' }}
-        run: |
-          # The cookies go to a file outside the repo, readable only by this job.
-          if [ -n "$YOUTUBE_COOKIES" ]; then
-            export YOUTUBE_COOKIES_FILE="$RUNNER_TEMP/youtube-cookies.txt"
-            (umask 077; printf '%s\n' "$YOUTUBE_COOKIES" > "$YOUTUBE_COOKIES_FILE")
-          fi
-          unset YOUTUBE_COOKIES
-          python -m sermon_clips process ${VIDEO:+--video "$VIDEO"} ${REDO:+--redo}
-
-      - name: Publish clips and review page
-        if: ${{ always() }}
-        run: |
-          python -m sermon_clips prune --keep 6
-          python -m sermon_clips page
-          cd media
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # One commit holding only the latest sermons, so the repo never grows.
-          git checkout -q --orphan publish
-          git add -A
-          git commit -qm "Sermon Shorts" --allow-empty
-          git push -qf origin publish:media
+          git fetch origin media
+          git worktree add media FETCH_HEAD
 
       - name: Create Buffer drafts
-        if: ${{ vars.BUFFER_VIDEO_CHANNELS != '' }}
+        if: ${{ vars.BUFFER_VIDEO_CHANNELS != '' && inputs.failure == '' }}
         env:
           BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
           BUFFER_VIDEO_CHANNELS: ${{ vars.BUFFER_VIDEO_CHANNELS }}
@@ -103,12 +49,15 @@ jobs:
         if: ${{ always() }}
         env:
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-        run: python -m sermon_clips notify
+          FAILURE: ${{ inputs.failure }}
+        run: python -m sermon_clips notify ${FAILURE:+--failure "$FAILURE"}
 
       - name: Record drafts and notifications
         if: ${{ always() }}
         run: |
           python -m sermon_clips page
           cd media
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --cached --quiet || (git commit -qm "Record Buffer drafts" && git push -qf origin publish:media)
+          git diff --cached --quiet || (git commit -qm "Record Buffer drafts" && git push -q origin HEAD:media)

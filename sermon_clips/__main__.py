@@ -4,7 +4,7 @@
     python -m sermon_clips page                             (review page for GitHub Pages)
     python -m sermon_clips prune --keep 6                   (keep only the latest sermons)
     python -m sermon_clips drafts                           (Buffer drafts for clips not yet in Buffer)
-    python -m sermon_clips notify                           (tell Teams which sermons are ready, or what failed)
+    python -m sermon_clips notify [--failure TEXT]          (tell Teams which sermons are ready, or what failed)
 """
 
 from __future__ import annotations
@@ -203,10 +203,13 @@ def cmd_drafts(args: argparse.Namespace) -> int:
 
 def cmd_notify(args: argparse.Namespace) -> int:
     url = os.environ.get("TEAMS_WEBHOOK_URL", "")
-    if FAILED.exists():
+    failures = load(FAILED)["failures"] if FAILED.exists() else []
+    if args.failure:  # reported by the Mac that makes the clips
+        failures.append({"title": "Sermon Shorts on the Mac", "error": args.failure})
+    if failures:
         run = (f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{os.environ.get('GITHUB_REPOSITORY', '')}"
                f"/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}")
-        for failure in load(FAILED)["failures"]:
+        for failure in failures:
             print(f"failed: {failure['title']}: {failure['error']}")
             if url:
                 teams.post(url, teams.failed_card(failure["title"], failure["error"], run))
@@ -234,7 +237,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("prune", help="keep only the latest sermons")
     p.add_argument("--keep", type=int, default=6)
     sub.add_parser("drafts", help="create Buffer drafts")
-    sub.add_parser("notify", help="post to Teams")
+    p = sub.add_parser("notify", help="post to Teams")
+    p.add_argument("--failure", help="report this error instead of (or as well as) ready sermons")
     args = parser.parse_args(argv)
     commands = {"process": cmd_process, "page": cmd_page, "prune": cmd_prune, "drafts": cmd_drafts,
                 "notify": cmd_notify}
