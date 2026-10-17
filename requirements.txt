@@ -1,4 +1,7 @@
 anthropic>=1.0
-yt-dlp>=2026.8.19
+yt-dlp[default,curl-cffi]>=2026.8.19
 opencv-python-headless>=4.10,<5
 numpy>=2.0
+imageio-ffmpeg>=0.6
+deno>=2.0
+keyring>=25

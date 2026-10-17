@@ -1,5 +1,12 @@
 """Sermon Shorts: turn each Sunday sermon into short vertical clips.
 
+On the church computer (macOS or Windows):
+
+    python -m sermon_clips setup [--remove]                 (store the Claude key, schedule the runs)
+    python -m sermon_clips run [--video ID] [--redo]        (make clips, upload them, start the GitHub workflow)
+
+The steps, as used by `run` and the GitHub workflow:
+
     python -m sermon_clips process [--video ID] [--redo]   (new sermons → clips on the media folder)
     python -m sermon_clips page                             (review page for GitHub Pages)
     python -m sermon_clips prune --keep 6                   (keep only the latest sermons)
@@ -10,6 +17,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import suppress
 from datetime import date, datetime, time, timedelta
 import json
 import os
@@ -201,11 +209,27 @@ def cmd_drafts(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def cmd_run(args: argparse.Namespace) -> int:
+    from . import local
+
+    if args.log:
+        local.log_to(Path(args.log))
+    process = argparse.Namespace(video=args.video, redo=args.redo)
+    return local.run(ROOT, MEDIA, FAILED, process=lambda: cmd_process(process),
+                     publish_page=lambda: cmd_page(args), prune=lambda: cmd_prune(argparse.Namespace(keep=6)))
+
+
+def cmd_setup(args: argparse.Namespace) -> int:
+    from . import local
+
+    return local.setup(ROOT, args.remove)
+
+
 def cmd_notify(args: argparse.Namespace) -> int:
     url = os.environ.get("TEAMS_WEBHOOK_URL", "")
     failures = load(FAILED)["failures"] if FAILED.exists() else []
-    if args.failure:  # reported by the Mac that makes the clips
-        failures.append({"title": "Sermon Shorts on the Mac", "error": args.failure})
+    if args.failure:  # reported by the church computer that makes the clips
+        failures.append({"title": "Sermon Shorts on the church computer", "error": args.failure})
     if failures:
         run = (f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{os.environ.get('GITHUB_REPOSITORY', '')}"
                f"/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}")
@@ -239,9 +263,19 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("drafts", help="create Buffer drafts")
     p = sub.add_parser("notify", help="post to Teams")
     p.add_argument("--failure", help="report this error instead of (or as well as) ready sermons")
+    p = sub.add_parser("run", help="on the church computer: make clips, upload them, start the GitHub workflow")
+    p.add_argument("--video", help="a YouTube video id or URL, instead of the next new sermon")
+    p.add_argument("--redo", action="store_true", help="start this sermon again (asks Claude again)")
+    p.add_argument("--log", help="append all output to this file (used by the scheduled task)")
+    p = sub.add_parser("setup", help="on the church computer: store the Claude key and schedule the runs")
+    p.add_argument("--remove", action="store_true", help="remove the scheduled task")
     args = parser.parse_args(argv)
+    # Tamil titles must print on a Windows console too.
+    for stream in (sys.stdout, sys.stderr):
+        with suppress(AttributeError, ValueError):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     commands = {"process": cmd_process, "page": cmd_page, "prune": cmd_prune, "drafts": cmd_drafts,
-                "notify": cmd_notify}
+                "notify": cmd_notify, "run": cmd_run, "setup": cmd_setup}
     return commands[args.command](args)
 
 

@@ -11,8 +11,6 @@ from __future__ import annotations
 
 from datetime import date
 import html
-import json
-import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -20,7 +18,7 @@ import subprocess
 import cv2
 import numpy as np
 
-from . import music
+from . import music, tools
 
 ROOT = Path(__file__).resolve().parent.parent
 LOGO = ROOT / "assets" / "logo-white.png"
@@ -31,14 +29,6 @@ DEADZONE, FOLLOW = 90, 0.06             # virtual camera: hold still, then ease 
 
 FONTS = ('<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@600;800'
          '&family=Roboto:wght@500;700;900&display=block" rel="stylesheet">')
-
-
-def find_chrome() -> str:
-    for candidate in (os.environ.get("CHROME"), shutil.which("google-chrome"), shutil.which("google-chrome-stable"),
-                      shutil.which("chromium"), "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"):
-        if candidate and Path(candidate).exists():
-            return candidate
-    raise RuntimeError("Chrome not found; set the CHROME environment variable")
 
 
 def esc(text: str) -> str:
@@ -77,7 +67,7 @@ html,body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;background:transpar
 def chrome_png(page_html: str, out: Path, transparent: bool) -> None:
     page = out.with_suffix(".html")
     page.write_text(page_html, encoding="utf-8")
-    args = [find_chrome(), "--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-sandbox",
+    args = [tools.chrome(), "--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-sandbox",
             f"--user-data-dir={out.parent / 'chrome-profile'}", "--allow-file-access-from-files",
             "--force-device-scale-factor=1", f"--window-size={W},{H}", "--virtual-time-budget=8000",
             f"--screenshot={out}"]
@@ -95,14 +85,15 @@ def load_rgba(path: Path):
 
 
 def video_size(src: Path) -> tuple[int, int]:
-    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
-                          "-of", "json", str(src)], check=True, capture_output=True, text=True).stdout
-    stream = json.loads(out)["streams"][0]
-    return stream["width"], stream["height"]
+    capture = cv2.VideoCapture(str(src))
+    try:
+        return int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)), int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    finally:
+        capture.release()
 
 
 def frames(src: Path, start: float, dur: float, fps: float, w: int, h: int):
-    proc = subprocess.Popen(["ffmpeg", "-v", "error", "-ss", f"{start}", "-t", f"{dur}", "-i", str(src),
+    proc = subprocess.Popen([tools.ffmpeg(), "-v", "error", "-ss", f"{start}", "-t", f"{dur}", "-i", str(src),
                              "-vf", f"fps={fps},scale={w}:{h}", "-f", "rawvideo", "-pix_fmt", "bgr24", "-"],
                             stdout=subprocess.PIPE)
     size = w * h * 3
@@ -202,7 +193,7 @@ def render(clip: dict, src: Path, out: Path, footer: str, with_music: bool = Tru
     if with_music:
         inputs += ["-i", str(music.compose(music_seed(out.stem + clip["title_en"]), dur + 1, work / "music.wav"))]
     enc = subprocess.Popen(
-        ["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{W}x{H}", "-r", str(FPS),
+        [tools.ffmpeg(), "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{W}x{H}", "-r", str(FPS),
          "-i", "-", *inputs,
          "-filter_complex", audio_graph(parts, dur, len(parts) + 1 if with_music else None),
          "-map", "0:v", "-map", "[aout]",
@@ -232,6 +223,6 @@ def render(clip: dict, src: Path, out: Path, footer: str, with_music: bool = Tru
 
 def poster(video: Path, out: Path, at: float = 1.5) -> Path:
     """A still for the review page."""
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{at}", "-i", str(video), "-frames:v", "1",
+    subprocess.run([tools.ffmpeg(), "-v", "error", "-y", "-ss", f"{at}", "-i", str(video), "-frames:v", "1",
                     "-vf", "scale=540:-1", "-q:v", "4", str(out)], check=True)
     return out

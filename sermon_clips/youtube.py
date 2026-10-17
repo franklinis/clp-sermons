@@ -2,7 +2,7 @@
 
 New uploads are found through the playlist's public RSS feed. The video and
 YouTube's automatic Tamil captions are then downloaded with yt-dlp. YouTube blocks
-cloud servers, so this runs on a Mac at the church (scripts/mac-run.sh).
+cloud servers, so this runs on a computer at the church (`python -m sermon_clips run`).
 """
 
 from __future__ import annotations
@@ -17,6 +17,8 @@ import sys
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+
+from . import tools
 
 FEED = "https://www.youtube.com/feeds/videos.xml?playlist_id={}"
 NS = {"atom": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015"}
@@ -88,12 +90,14 @@ def download(sermon: Sermon, workdir: Path) -> tuple[Path, Path]:
     workdir.mkdir(parents=True, exist_ok=True)
     video, captions = workdir / "sermon.mp4", workdir / "sermon.ta-orig.json3"
     if not (video.exists() and captions.exists()):
+        runtime = tools.deno()
         result = subprocess.run(
             [sys.executable, "-m", "yt_dlp", "--no-progress", "--no-playlist",
+             "--ffmpeg-location", tools.ffmpeg(), *(["--js-runtimes", f"deno:{runtime}"] if runtime else []),
              "-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]", "--merge-output-format", "mp4",
              "--write-auto-subs", "--sub-langs", "ta-orig", "--sub-format", "json3",
              "-o", str(workdir / "sermon.%(ext)s"), sermon.url],
-            capture_output=True, text=True,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
         print(result.stdout[-2000:])
         if result.returncode != 0:

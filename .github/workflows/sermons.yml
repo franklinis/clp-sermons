@@ -1,14 +1,14 @@
 name: Sermon Shorts
 
-# The clips are made on a Mac at the church (scripts/mac-run.sh): YouTube doesn't allow
-# downloads from cloud servers like GitHub's. When the Mac has pushed new clips to the
-# `media` branch, it starts this workflow, which uses the repository's secrets to save the
-# Buffer drafts and tell Teams, or to report what failed.
+# The clips are made on a computer at the church (`python -m sermon_clips run`): YouTube
+# doesn't allow downloads from cloud servers like GitHub's. When that computer has pushed
+# new clips to the `media` branch, it starts this workflow, which uses the repository's
+# secrets to save the Buffer drafts and tell Teams, or to report what failed.
 on:
   workflow_dispatch:
     inputs:
       failure:
-        description: "Set by the Mac when making clips failed: what went wrong"
+        description: "Set by the church computer when making clips failed: what went wrong"
         required: false
 
 permissions:

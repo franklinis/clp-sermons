@@ -83,3 +83,42 @@ def test_post_text_and_review_page():
     assert "https://youtu.be/x" in text and "#TamilSermon" in text
     page = review.page([sermon])
     assert 'src="sermons/2026-10-11-x/c1.mp4"' in page and "noindex" in page
+
+
+def test_windows_task_runs_missed_times_and_hides_the_window(tmp_path):
+    import xml.etree.ElementTree as ET
+
+    from sermon_clips import local
+
+    python = tmp_path / "python.exe"
+    (tmp_path / "pythonw.exe").write_text("")
+    xml = local.windows_task_xml(Path(r"C:\clp-sermons"), str(python), Path(r"C:\logs\clp sermons.log"))
+    ns = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
+    task = ET.fromstring(xml.split("?>", 1)[1])
+    triggers = task.findall(".//t:CalendarTrigger", ns)
+    assert len(triggers) == len(local.SCHEDULE) == 5
+    assert task.find(".//t:StartWhenAvailable", ns).text == "true"
+    assert task.find(".//t:Command", ns).text.endswith("pythonw.exe")
+    assert task.find(".//t:Arguments", ns).text == r'-m sermon_clips run --log "C:\logs\clp sermons.log"'
+    assert [d.tag.split("}")[1] for d in triggers[2].find(".//t:DaysOfWeek", ns)] == ["Monday", "Tuesday"]
+
+
+def test_mac_schedule_has_every_time():
+    import plistlib
+
+    from sermon_clips import local
+
+    plist = plistlib.loads(local.launchd_plist(Path("/repo"), "/repo/.venv/bin/python", Path("/tmp/x.log")))
+    assert len(plist["StartCalendarInterval"]) == 8  # Sunday 2×, Monday 3×, Tuesday 3×
+    assert {"Weekday": 0, "Hour": 15, "Minute": 0} in plist["StartCalendarInterval"]
+    assert plist["ProgramArguments"][-3:] == ["run", "--log", "/tmp/x.log"]
+
+
+def test_only_one_run_at_a_time(tmp_path, monkeypatch):
+    from sermon_clips import local
+
+    monkeypatch.setattr(local.tempfile, "gettempdir", lambda: str(tmp_path))
+    with local.single_run() as first, local.single_run() as second:
+        assert first and not second
+    with local.single_run() as again:
+        assert again
